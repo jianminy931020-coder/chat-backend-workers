@@ -1,0 +1,31 @@
+{
+  "name": "chat-backend-workers",
+  "version": "1.0.0",
+  "description": "Chat backend using Cloudflare Workers with GraphQL and OpenAI",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "wrangler build",
+    "start": "wrangler dev"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "graphql",
+    "openai",
+    "chat"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20231218.0",
+    "@types/node": "^20.10.5",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.19.0"
+  },
+  "dependencies": {
+    "graphql": "^16.8.1",
+    "graphql-yoga": "^5.0.0",
+    "openai": "^4.20.1"
+  }
+}
