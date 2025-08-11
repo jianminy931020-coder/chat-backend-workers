@@ -1,19 +1,63 @@
+// src/index.ts
 import { createYoga } from 'graphql-yoga'
-import { schema, resolvers } from './schema'
+import { makeExecutableSchema } from '@graphql-tools/schema'
+
+// 简化的 Resolvers
+const resolvers = {
+  Query: {
+    hello: () => {
+      console.log('Hello resolver executed')
+      return 'Hello World!'
+    },
+  },
+  Mutation: {
+    sendMessage: (parent: any, args: any, context: any) => {
+      console.log('=== sendMessage resolver 被调用 ===')
+      console.log('Args:', JSON.stringify(args))
+      console.log('Context:', JSON.stringify(context, null, 2))
+
+      const result = {
+        success: true,
+        message: '测试成功',
+        response: `你说了: ${args.message}`,
+      }
+
+      console.log('返回结果:', JSON.stringify(result))
+      return result
+    },
+  },
+}
+
+const executableSchema = makeExecutableSchema({
+  typeDefs: `
+    type Query {
+      hello: String
+    }
+
+    type Mutation {
+      sendMessage(message: String!): SendMessageResponse!
+    }
+
+    type SendMessageResponse {
+      success: Boolean!
+      message: String!
+      response: String!
+    }
+  `,
+  resolvers,
+})
 
 // 创建 GraphQL Yoga 实例
 const yoga = createYoga({
-  schema,
-  resolvers, // 直接传递 resolvers
+  schema: executableSchema,
   cors: false,
-  graphqlEndpoint: '/graphql',
-  graphiql: true,
-  // 添加上下文函数
-  context: ({ request, env, executionContext }) => ({
-    request,
-    env,
-    executionContext,
-  }),
+  context: (params) => {
+    console.log('创建 context')
+    return {
+      env: params.env,
+      request: params.request,
+    }
+  },
 })
 
 export default {
@@ -22,9 +66,11 @@ export default {
     env: any,
     ctx: ExecutionContext
   ): Promise<Response> {
+    console.log('Worker fetch 被调用:', request.method, request.url)
+
     const url = new URL(request.url)
 
-    // 统一的 CORS 头部
+    // CORS 头部
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -35,54 +81,40 @@ export default {
 
     // 处理 CORS 预检请求
     if (request.method === 'OPTIONS') {
+      console.log('处理 OPTIONS 请求')
       return new Response(null, {
         status: 200,
         headers: corsHeaders,
       })
     }
 
-    // 健康检查端点
-    if (url.pathname === '/health') {
-      return new Response(
-        JSON.stringify({
-          status: 'healthy',
-          timestamp: new Date().toISOString(),
-          version: '1.0.0',
-        }),
-        {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      )
-    }
-
     // GraphQL 端点
     if (url.pathname === '/graphql' || url.pathname === '/') {
       try {
-        // 正确传递环境变量给 GraphQL context
-        const response = await yoga.handleRequest(request, {
-          request,
+        console.log('处理 GraphQL 请求')
+
+        // 使用 fetch 方法而不是 handleRequest
+        const response = await yoga.fetch(request, {
           env,
-          executionContext: ctx,
+          request,
+          ctx,
         })
 
-        // 创建新的响应，只添加我们的 CORS 头部
-        const newResponse = new Response(response.body, {
+        console.log('GraphQL 响应状态:', response.status)
+
+        // 添加 CORS 头
+        const headers = new Headers(response.headers)
+        Object.entries(corsHeaders).forEach(([key, value]) => {
+          headers.set(key, value)
+        })
+
+        return new Response(response.body, {
           status: response.status,
           statusText: response.statusText,
-          headers: {
-            'Content-Type':
-              response.headers.get('Content-Type') || 'application/json',
-            ...corsHeaders,
-          },
+          headers,
         })
-
-        return newResponse
       } catch (error) {
-        console.error('GraphQL execution error:', error)
+        console.error('GraphQL 处理错误:', error)
         return new Response(
           JSON.stringify({
             errors: [
@@ -107,19 +139,24 @@ export default {
       }
     }
 
-    // 404 处理
-    return new Response(
-      JSON.stringify({
-        error: 'Not Found',
-        message: `Path ${url.pathname} not found`,
-      }),
-      {
-        status: 404,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders,
-        },
-      }
-    )
+    // 健康检查
+    if (url.pathname === '/health') {
+      return new Response(
+        JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      )
+    }
+
+    // 404
+    return new Response('Not Found', {
+      status: 404,
+      headers: corsHeaders,
+    })
   },
 }
