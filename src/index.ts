@@ -7,24 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Max-Age': '86400',
-  'Access-Control-Allow-Credentials': 'true',
 }
 
 // 创建 GraphQL Yoga 实例
 const yoga = createYoga({
   schema,
   rootValue: resolvers,
-  cors: {
-    origin: '*',
-    credentials: true,
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'Accept',
-      'X-Requested-With',
-    ],
-  },
+  cors: false,
   // 自定义 GraphQL 端点路径
   graphqlEndpoint: '/graphql',
   // 启用 GraphiQL 调试界面（生产环境可以关闭）
