@@ -1,23 +1,19 @@
 import { createYoga } from 'graphql-yoga'
 import { schema, resolvers } from './schema'
 
-// CORS 配置
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Max-Age': '86400',
-}
-
 // 创建 GraphQL Yoga 实例
 const yoga = createYoga({
   schema,
-  rootValue: resolvers,
+  resolvers, // 直接传递 resolvers
   cors: false,
-  // 自定义 GraphQL 端点路径
   graphqlEndpoint: '/graphql',
-  // 启用 GraphiQL 调试界面（生产环境可以关闭）
   graphiql: true,
+  // 添加上下文函数
+  context: ({ request, env, executionContext }) => ({
+    request,
+    env,
+    executionContext,
+  }),
 })
 
 export default {
@@ -27,6 +23,15 @@ export default {
     ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url)
+
+    // 统一的 CORS 头部
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers':
+        'Content-Type, Authorization, Accept, X-Requested-With',
+      'Access-Control-Max-Age': '86400',
+    }
 
     // 处理 CORS 预检请求
     if (request.method === 'OPTIONS') {
@@ -57,18 +62,20 @@ export default {
     // GraphQL 端点
     if (url.pathname === '/graphql' || url.pathname === '/') {
       try {
-        // 将环境变量传递给 GraphQL 上下文
-        const response = await yoga.fetch(request, {
+        // 正确传递环境变量给 GraphQL context
+        const response = await yoga.handleRequest(request, {
+          request,
           env,
-          ctx,
+          executionContext: ctx,
         })
 
-        // 添加 CORS 头部
+        // 创建新的响应，只添加我们的 CORS 头部
         const newResponse = new Response(response.body, {
           status: response.status,
           statusText: response.statusText,
           headers: {
-            ...Object.fromEntries(response.headers),
+            'Content-Type':
+              response.headers.get('Content-Type') || 'application/json',
             ...corsHeaders,
           },
         })
@@ -78,8 +85,16 @@ export default {
         console.error('GraphQL execution error:', error)
         return new Response(
           JSON.stringify({
-            error: 'Internal server error',
-            message: error instanceof Error ? error.message : 'Unknown error',
+            errors: [
+              {
+                message: 'Internal server error',
+                extensions: {
+                  code: 'INTERNAL_SERVER_ERROR',
+                  details:
+                    error instanceof Error ? error.message : 'Unknown error',
+                },
+              },
+            ],
           }),
           {
             status: 500,

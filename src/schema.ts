@@ -1,5 +1,5 @@
-import { buildSchema } from 'graphql';
-import OpenAI from 'openai';
+import { buildSchema } from 'graphql'
+import OpenAI from 'openai'
 
 // GraphQL Schema 定义
 export const schema = buildSchema(`
@@ -24,65 +24,117 @@ export const schema = buildSchema(`
     message: String!
     response: String!
   }
-`);
+`)
 
 // 定义 Context 类型
 interface Context {
   env: {
-    OPENAI_API_KEY: string;
-  };
+    OPENAI_API_KEY: string
+  }
+  request: Request
+  executionContext: ExecutionContext
 }
 
 // OpenAI 客户端实例
-let openaiClient: OpenAI | null = null;
+let openaiClient: OpenAI | null = null
 
 const getOpenAIClient = (apiKey: string): OpenAI => {
   if (!openaiClient) {
     openaiClient = new OpenAI({
       apiKey: apiKey,
-    });
+    })
   }
-  return openaiClient;
-};
+  return openaiClient
+}
 
 // GraphQL 解析器
 export const resolvers = {
   Query: {
-    hello: () => 'Hello from Cloudflare Workers GraphQL!',
+    hello: () => {
+      console.log('Hello query called')
+      return 'Hello from Cloudflare Workers GraphQL!'
+    },
     chatHistory: async (_: any, __: any, context: Context) => {
-      // 在实际应用中，这里应该从数据库获取聊天历史
-      // 现在返回空数组作为示例
-      return [];
+      console.log('ChatHistory query called')
+      return []
     },
   },
 
   Mutation: {
-    sendMessage: async (_: any, { message }: { message: string }, context: Context) => {
+    sendMessage: async (
+      _: any,
+      args: { message: string },
+      context: Context
+    ) => {
+      console.log('=== sendMessage resolver 开始执行 ===')
+      console.log('参数:', JSON.stringify(args))
+      console.log('Context keys:', Object.keys(context || {}))
+
+      // 确保总是返回一个有效的响应对象
       try {
+        const { message } = args
+
         // 验证输入
         if (!message || message.trim().length === 0) {
+          console.log('消息为空')
           return {
             success: false,
             message: '消息不能为空',
             response: '',
-          };
+          }
         }
 
-        // 获取 OpenAI API Key
-        const apiKey = context.env.OPENAI_API_KEY;
-        if (!apiKey) {
-          console.error('OPENAI_API_KEY not found in environment variables');
+        // 检查 context
+        if (!context) {
+          console.error('Context is null or undefined')
           return {
             success: false,
-            message: 'OpenAI API Key 未配置',
+            message: 'Context 未正确传递',
             response: '',
-          };
+          }
         }
 
-        // 创建 OpenAI 客户端
+        // 检查 env
+        if (!context.env) {
+          console.error('context.env is null or undefined')
+          return {
+            success: false,
+            message: '环境变量未正确传递',
+            response: '',
+          }
+        }
+
+        // 获取 API Key
+        const apiKey = context.env.OPENAI_API_KEY
+        console.log('API Key 检查:', {
+          exists: !!apiKey,
+          length: apiKey ? apiKey.length : 0,
+          prefix: apiKey ? apiKey.substring(0, 10) + '...' : 'N/A',
+        })
+
+        if (!apiKey) {
+          console.error('OPENAI_API_KEY not found')
+          return {
+            success: false,
+            message: 'OpenAI API Key 未配置，请检查环境变量设置',
+            response: '',
+          }
+        }
+
+        // 先返回测试响应，确保基本流程正常
+        console.log('返回测试响应')
+        return {
+          success: true,
+          message: '消息处理成功（测试模式）',
+          response: `收到您的消息: "${message}". 这是一个测试响应。`,
+        }
+
+        // TODO: 等基本流程正常后，再启用 OpenAI 调用
+        /*
+        console.log('创建 OpenAI 客户端');
         const openai = getOpenAIClient(apiKey);
 
-        // 调用 OpenAI API
+        console.log('调用 OpenAI API');
         const completion = await openai.chat.completions.create({
           model: 'gpt-3.5-turbo',
           messages: [
@@ -100,34 +152,36 @@ export const resolvers = {
         });
 
         const response = completion.choices[0]?.message?.content || '抱歉，我无法生成回复。';
+        console.log('OpenAI 响应成功');
 
         return {
           success: true,
           message: '消息发送成功',
           response: response,
         };
-
+        */
       } catch (error) {
-        console.error('Error calling OpenAI API:', error);
-        
-        let errorMessage = '处理消息时发生错误';
-        
-        if (error instanceof Error) {
-          if (error.message.includes('API key')) {
-            errorMessage = 'OpenAI API Key 无效或未设置';
-          } else if (error.message.includes('quota')) {
-            errorMessage = 'OpenAI API 配额不足';
-          } else if (error.message.includes('rate limit')) {
-            errorMessage = 'API 调用频率超限，请稍后再试';
-          }
-        }
+        console.error('=== Resolver 捕获到错误 ===')
+        console.error('错误详情:', error)
+        console.error('错误类型:', error?.constructor?.name)
+        console.error(
+          '错误消息:',
+          error instanceof Error ? error.message : String(error)
+        )
+        console.error(
+          '错误堆栈:',
+          error instanceof Error ? error.stack : 'No stack'
+        )
 
+        // 确保即使发生错误也返回有效的响应对象
         return {
           success: false,
-          message: errorMessage,
+          message: `发生错误: ${
+            error instanceof Error ? error.message : '未知错误'
+          }`,
           response: '',
-        };
+        }
       }
     },
   },
-};
+}
