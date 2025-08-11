@@ -17,6 +17,13 @@ const yoga = createYoga({
   cors: {
     origin: '*',
     credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Requested-With',
+    ],
   },
   // 自定义 GraphQL 端点路径
   graphqlEndpoint: '/graphql',
